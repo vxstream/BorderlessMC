@@ -1,0 +1,44 @@
+name: Build BorderlessMC (Windows exe)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller==6.11.1
+
+      - name: Test import on Windows
+        run: python -c "import borderless_mc; print('import ok')"
+
+      - name: Build exe
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed ^
+            --name BorderlessMC ^
+            --hidden-import tkinter ^
+            borderless_mc.py
+
+      - name: Smoke test
+        run: |
+          .\dist\BorderlessMC.exe --help
+          if ($LASTEXITCODE -ne 0) { throw "--help failed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BorderlessMC-windows
+          path: dist/BorderlessMC.exe
+          if-no-files-found: error
