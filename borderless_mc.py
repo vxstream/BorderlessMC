@@ -865,7 +865,19 @@ def run_cli(args: argparse.Namespace) -> int:
     return run_gui()
 
 
+def _ensure_stdio() -> None:
+    """В .exe, собранном с --windowed, sys.stdout/sys.stderr бывают None.
+
+    Подменяем их на os.devnull, иначе argparse и print() падают с AttributeError.
+    """
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name, None) is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+
+
 def main(argv: list[str] | None = None) -> int:
+    _ensure_stdio()
+
     if os.name != "nt":
         print("BorderlessMC работает только под Windows.", file=sys.stderr)
         return 2
