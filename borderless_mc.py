@@ -118,8 +118,11 @@ user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
 WNDENUMPROC_T = ctypes.WINFUNCTYPE(
     wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
 )
+# BOOL CALLBACK(HMONITOR, HDC, LPRECT, LPARAM) — четыре аргумента,
+# первый элемент WINFUNCTYPE это тип возврата, а не аргумент.
 MONITORENUMPROC_T = ctypes.WINFUNCTYPE(
-    wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.c_void_p
+    wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC,
+    ctypes.POINTER(wintypes.RECT), wintypes.LPARAM,
 )
 
 user32.EnumWindows.restype = wintypes.BOOL
