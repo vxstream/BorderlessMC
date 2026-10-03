@@ -866,13 +866,34 @@ def run_cli(args: argparse.Namespace) -> int:
 
 
 def _ensure_stdio() -> None:
-    """В .exe, собранном с --windowed, sys.stdout/sys.stderr бывают None.
+    """Приводит stdout/stderr к utf-8, иначе русский текст роняет вывод.
 
-    Подменяем их на os.devnull, иначе argparse и print() падают с AttributeError.
+    В .exe, собранном PyInstaller с --windowed, бывают два варианта:
+      * sys.stdout равен None — тогда подставляем поток в devnull;
+      * поток есть, но с системной кодировкой (cp1252/cp866) — тогда
+        русский текст в --help падает с UnicodeEncodeError.
     """
     for name in ("stdout", "stderr"):
-        if getattr(sys, name, None) is None:
+        stream = getattr(sys, name, None)
+        if stream is None:
             setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+                continue
+            except (ValueError, OSError):
+                pass
+        buffer = getattr(stream, "buffer", None)
+        if buffer is not None:
+            import io
+
+            setattr(
+                sys, name,
+                io.TextIOWrapper(buffer, encoding="utf-8", errors="replace",
+                                 line_buffering=True),
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
