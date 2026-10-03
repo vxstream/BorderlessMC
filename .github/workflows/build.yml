@@ -3,7 +3,6 @@ name: Build BorderlessMC (Windows exe)
 on:
   push:
     branches: [main, master]
-    tags: ["v*"]
   workflow_dispatch:
 
 jobs:
@@ -25,11 +24,7 @@ jobs:
         run: python -c "import borderless_mc; print('import ok')"
 
       - name: Build exe
-        run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed ^
-            --name BorderlessMC ^
-            --hidden-import tkinter ^
-            borderless_mc.py
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name BorderlessMC --hidden-import tkinter borderless_mc.py
 
       - name: Smoke test
         run: |
