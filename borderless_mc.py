@@ -115,6 +115,20 @@ user32.SetWindowPos.argtypes = [
 user32.GetWindowRect.restype = wintypes.BOOL
 user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
 
+WNDENUMPROC_T = ctypes.WINFUNCTYPE(
+    wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+)
+MONITORENUMPROC_T = ctypes.WINFUNCTYPE(
+    wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.c_void_p
+)
+
+user32.EnumWindows.restype = wintypes.BOOL
+user32.EnumWindows.argtypes = [WNDENUMPROC_T, wintypes.LPARAM]
+user32.EnumDisplayMonitors.restype = wintypes.BOOL
+user32.EnumDisplayMonitors.argtypes = [
+    wintypes.HDC, ctypes.c_void_p, MONITORENUMPROC_T, wintypes.LPARAM
+]
+
 user32.GetWindowTextLengthW.restype = ctypes.c_int
 user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
 user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
@@ -260,15 +274,12 @@ def java_processes() -> dict[int, str]:
 
 def top_level_windows() -> list[int]:
     handles: list[int] = []
-    WNDENUMPROC = ctypes.WINFUNCTYPE(
-        wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
-    )
 
     def callback(hwnd, _lparam):
         handles.append(hwnd)
         return True
 
-    user32.EnumWindows(WNDENUMPROC(callback), 0)
+    user32.EnumWindows(WNDENUMPROC_T(callback), 0)
     return handles
 
 
@@ -330,9 +341,6 @@ def monitor_info(hwnd: int) -> MONITORINFO | None:
 def enumerate_monitors() -> list[MONITORINFO]:
     """Все мониторы в порядке EnumDisplayMonitors (0 — основной)."""
     found: list[MONITORINFO] = []
-    MONITORENUMPROC = ctypes.WINFUNCTYPE(
-        wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.c_void_p
-    )
 
     def cb(hmon, _hdc, _rect, _data):
         info = MONITORINFO()
@@ -341,7 +349,7 @@ def enumerate_monitors() -> list[MONITORINFO]:
             found.append(info)
         return True
 
-    user32.EnumDisplayMonitors(0, 0, MONITORENUMPROC(cb), 0)
+    user32.EnumDisplayMonitors(0, 0, MONITORENUMPROC_T(cb), 0)
     return found
 
 
@@ -580,7 +588,6 @@ class WNDCLASSW(ctypes.Structure):
 WNDPROC = ctypes.WINFUNCTYPE(
     ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
 )
-WNDENUMPROC_T = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
 
 class MSG(ctypes.Structure):
@@ -605,11 +612,6 @@ def _wnd_proc(hwnd, msg, wparam, lparam):
 
 user32.GetClassNameW.restype = ctypes.c_int
 user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.EnumWindows.argtypes = [WNDENUMPROC_T, wintypes.LPARAM]
-user32.EnumDisplayMonitors.restype = wintypes.BOOL
-user32.EnumDisplayMonitors.argtypes = [
-    wintypes.HDC, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p
-]
 kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
 
@@ -949,13 +951,23 @@ def selftest() -> int:
           "64-bit" if IS_64BIT else "32-bit",
           "| мониторов:", monitors)
 
-    # Размеры структур должны совпадать с ожидаемыми для Win32/Win64.
-    if ctypes.sizeof(PROCESSENTRY32W) != 556:
+    # Структуры свёряются с MSVC: szExeFile[260] и выравнивание под
+    # ULONG_PTR дают 568 байт на x64 и 556 на x86.
+    expected_pe32 = (568 if IS_64BIT else 556)
+    if ctypes.sizeof(PROCESSENTRY32W) != expected_pe32:
         print("Неверный размер PROCESSENTRY32W:",
-              ctypes.sizeof(PROCESSENTRY32W))
+              ctypes.sizeof(PROCESSENTRY32W), "ожидалось", expected_pe32)
         return 1
     if ctypes.sizeof(MONITORINFO) != 40:
         print("Неверный размер MONITORINFO:", ctypes.sizeof(MONITORINFO))
+        return 1
+    if ctypes.sizeof(wintypes.RECT) != 16:
+        print("Неверный размер RECT:", ctypes.sizeof(wintypes.RECT))
+        return 1
+
+    if monitors < 1:
+        print("EnumDisplayMonitors вернул 0 мониторов — "
+              "проверь MONITORENUMPROC_T в argtypes.")
         return 1
 
     try:
