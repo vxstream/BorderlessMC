@@ -27,9 +27,13 @@ jobs:
         run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name BorderlessMC --hidden-import tkinter borderless_mc.py
 
       - name: Smoke test
+        # EXE собран с --windowed (GUI subsystem), поэтому PowerShell его
+        # не дожидается и $LASTEXITCODE остаётся от предыдущей команды.
+        # Start-Process -Wait -PassThru даёт настоящий ExitCode.
         run: |
-          .\dist\BorderlessMC.exe --help
-          if ($LASTEXITCODE -ne 0) { throw "--help failed" }
+          $p = Start-Process -FilePath ".\dist\BorderlessMC.exe" -ArgumentList "--selftest" -Wait -PassThru -NoNewWindow
+          Write-Host "ExitCode: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "selftest failed with $($p.ExitCode)" }
 
       - uses: actions/upload-artifact@v4
         with:

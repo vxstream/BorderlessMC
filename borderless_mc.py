@@ -913,8 +913,60 @@ def main(argv: list[str] | None = None) -> int:
                         help="индекс монитора, −1 (по умолчанию) = монитор окна")
     parser.add_argument("--restore", action="store_true",
                         help="восстановить все сохранённые окна и выйти")
+    parser.add_argument("--selftest", action="store_true",
+                        help="проверить привязки Win32 и выйти с кодом 0")
     args = parser.parse_args(argv)
+
+    if args.selftest:
+        return selftest()
     return run_cli(args)
+
+
+def selftest() -> int:
+    """Проверяет, что все ctypes-привязки разрешились. Код 0 — успех."""
+    checks = [
+        ("GetWindowLongW", lambda: user32.GetWindowLongW),
+        ("SetWindowLongPtrW", lambda: _SET_WINDOW_LONG),
+        ("SetWindowPos", lambda: user32.SetWindowPos),
+        ("GetWindowRect", lambda: user32.GetWindowRect),
+        ("GetMonitorInfoW", lambda: user32.GetMonitorInfoW),
+        ("EnumWindows", lambda: user32.EnumWindows),
+        ("EnumDisplayMonitors", lambda: user32.EnumDisplayMonitors),
+        ("CreateToolhelp32Snapshot", lambda: kernel32.CreateToolhelp32Snapshot),
+        ("Process32FirstW", lambda: kernel32.Process32FirstW),
+        ("RegisterHotKey", lambda: user32.RegisterHotKey),
+        ("DwmExtendFrameIntoClientArea",
+         lambda: dwmapi.DwmExtendFrameIntoClientArea if dwmapi else None),
+    ]
+    failed = [name for name, get in checks if get() is None]
+
+    if failed:
+        print("НЕ РАЗРЕШИЛИСЬ:", ", ".join(failed))
+        return 1
+
+    monitors = monitor_count()
+    print("Win32 OK | разрядность:",
+          "64-bit" if IS_64BIT else "32-bit",
+          "| мониторов:", monitors)
+
+    # Размеры структур должны совпадать с ожидаемыми для Win32/Win64.
+    if ctypes.sizeof(PROCESSENTRY32W) != 556:
+        print("Неверный размер PROCESSENTRY32W:",
+              ctypes.sizeof(PROCESSENTRY32W))
+        return 1
+    if ctypes.sizeof(MONITORINFO) != 40:
+        print("Неверный размер MONITORINFO:", ctypes.sizeof(MONITORINFO))
+        return 1
+
+    try:
+        procs = java_processes()
+        print("Процессов java/javaw:", len(procs))
+    except OSError as exc:
+        print("Снимок процессов не удался:", exc)
+        return 1
+
+    print("SELFTEST OK")
+    return 0
 
 
 if __name__ == "__main__":
